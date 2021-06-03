@@ -1,0 +1,33 @@
+{
+  "Net": {
+    "K": 7,
+    "input_size": [
+      3,
+      96, 
+      96 
+    ],
+    "z_size": 64,
+    "image_decoder": "big"
+  },
+  "dataset": {
+    "data_path": "",
+    "h5_path": "clevr6_with_masks_train.h5",
+    "masks": false,
+    "clevr_preprocess_style": "clevr-small"
+  },
+  "seed": 1,
+  "training": {
+    "batch_size": 64,
+    "use_geco": false,
+    "use_scheduler": true,
+    "iters": 500000,
+    "load_from_checkpoint": false,
+    "lr": 0.0004,
+    "clip_grad_norm": false,
+    "model": "SlotAttention",
+    "num_workers": 8,
+    "run_suffix": "slot-attention-clevr6",
+    "tensorboard_freq": 100,
+    "out_dir": ""
+  }
+}

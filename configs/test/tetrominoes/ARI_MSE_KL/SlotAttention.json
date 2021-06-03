@@ -1,0 +1,31 @@
+{
+    "Net": {
+      "K": 4,
+      "input_size": [
+        3,
+        35, 
+        35
+      ],
+      "z_size": 32,
+      "image_decoder": "small"
+    },
+    "dataset": {
+      "data_path": "",
+      "h5_path": "tetrominoes_test.h5",
+      "masks": true
+    },
+    "seed": 1,
+    "test": {
+      "batch_size":1,
+      "output_size": [3,35,35],
+      "num_images_to_process": 320,    
+      "eval_type": "ARI_MSE_KL",
+      "mode": "test",
+      "model": "SlotAttention",
+      "experiment_name": "Multi_Object_Datasets",
+      "out_dir": "",
+      "checkpoint": "",
+      "checkpoint_dir": ""
+    }
+  }
+  

@@ -1,0 +1,33 @@
+{
+    "Net": {
+      "K": 6,
+      "input_size": [
+        3,
+        64, 
+        64 
+      ],
+      "z_size": 64,
+      "image_decoder": "small"
+    },
+    "dataset": {
+      "data_path": "",
+      "h5_path": "multi_dsprites_colored_on_grayscale.h5",
+      "masks": false
+    },
+    "seed": 1,
+    "training": {
+      "batch_size": 64,
+      "use_geco": false,
+      "use_scheduler": true,
+      "iters": 500000,
+      "load_from_checkpoint": false,
+      "lr": 0.0004,
+      "clip_grad_norm": false,
+      "model": "SlotAttention",
+      "num_workers": 8,
+      "run_suffix": "slot-attention-multi-dsprites",
+      "tensorboard_freq": 100,
+      "out_dir": ""
+    }
+  }
+  

@@ -1,0 +1,39 @@
+{
+  "Net": {
+    "K": 6,
+    "input_size": [
+      3,
+      64, 
+      64
+    ],
+    "image_likelihood": "Gaussian",
+    "z_size": 64,
+    "image_decoder": "iodine",
+    "stochastic_layers": 3,
+    "refinement_iters": 1,
+    "log_scale": -2.3025859,
+    "bottom_up_prior": false,
+    "reverse_prior_plusplus": true,
+    "use_DualGRU": true
+  },
+    "dataset": {
+      "data_path": "",
+      "h5_path": "multi_dsprites_colored_on_grayscale_test.h5",
+      "masks": true
+    },
+    "seed": 1,
+    "test": {
+      "batch_size":1,
+      "output_size": [3,64,64],
+      "num_images_to_process": 1,
+      "use_geco": false,      
+      "eval_type": "disentanglement_viz",
+      "mode": "test",
+      "model": "EfficientMORL",
+      "experiment_name": "multidsprites_disentanglement",
+      "out_dir": "",
+      "checkpoint": "",
+      "checkpoint_dir": ""
+    }
+  }
+  

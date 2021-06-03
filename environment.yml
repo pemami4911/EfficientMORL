@@ -1,0 +1,21 @@
+name: emorl
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+dependencies:
+  - h5py=2.8.0
+  - numpy=1.19.1
+  - pillow=7.2.0
+  - pip=20.2.2
+  - pytorch=1.5.0
+  - python=3.7.7
+  - six=1.15.0
+  - scipy=1.5.2
+  - torchvision=0.6.0
+  - tqdm=4.48.2
+  - pip:
+    - sacred==0.8.1
+    - scikit-learn==0.22.1
+    - git+https://github.com/ildoonet/pytorch-gradual-warmup-lr.git
+    - tb-nightly==2.4.0a20200917

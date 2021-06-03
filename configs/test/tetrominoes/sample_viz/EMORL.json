@@ -1,0 +1,42 @@
+{
+    "Net": {
+      "K": 4,
+      "input_size": [
+        3,
+        35, 
+        35
+      ],
+      "image_likelihood": "Gaussian",
+      "z_size": 32,
+      "image_decoder": "small",
+      "stochastic_layers": 3,
+      "refinement_iters": 3,
+      "log_scale": -1.2039728,
+      "bottom_up_prior": false,
+      "reverse_prior_plusplus": true,
+      "use_DualGRU": true
+    },
+    "dataset": {
+      "data_path": "",
+      "h5_path": "tetrominoes_test.h5",
+      "masks": true
+    },
+    "seed": 1,
+    "test": {
+      "batch_size":1,
+      "output_size": [3,35,35],
+      "num_images_to_process": 10,
+      "use_geco": true,
+      "geco_beta_stepsize": 1e-06,
+      "geco_ema_alpha": 0.99,
+      "geco_reconstruction_target": -4500,      
+      "eval_type": "sample_viz",
+      "mode": "test",
+      "model": "EfficientMORL",
+      "experiment_name": "visualizations",
+      "out_dir": "",
+      "checkpoint": "",
+      "checkpoint_dir": ""
+    }
+  }
+  
