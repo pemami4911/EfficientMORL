@@ -204,9 +204,9 @@ def run(training, seed, _run):
             
             if training['use_geco']:
                 if step == model.module.geco_warm_start:
-                    model.module.geco_C_ema = model_geco.init_ema(model.module.geco_C_ema, nll)
+                    model.module.geco_C_ema = model_geco.init_ema(model.module.geco_C_ema, out_dict['nll'])
                 elif step > model.module.geco_warm_start:
-                    model.module.geco_C_ema = model_geco.update_ema(model.module.geco_C_ema, nll)
+                    model.module.geco_C_ema = model_geco.update_ema(model.module.geco_C_ema, out_dict['nll'])
                     model.module.geco_beta = model_geco.step_beta(model.module.geco_C_ema,
                             model.module.geco_beta, training['geco_beta_stepsize'])
 
@@ -221,7 +221,7 @@ def run(training, seed, _run):
                     writer.add_scalar('train/KL_beta', kl_beta, step)
                     writer.add_scalar('train/NLL', out_dict['nll'], step)
                     visualize_output(writer, (img_batch+1)/2., out_dict,
-                                     model.module.stochastic_layers+model.module.refinement_iters,
+                                     model.module.stochastic_layers, model.module.refinement_iters,
                                      step)
 
                 if training['use_geco']:

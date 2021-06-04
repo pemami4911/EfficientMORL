@@ -3,7 +3,7 @@ import torch.nn as nn
 import math
 from sacred import Ingredient
 from lib.dual_gru import GRUCell, DualGRU
-from lib.utils import init_weights, _softplus_to_std, mvn, std_mvn, mvn_product
+from lib.utils import init_weights, _softplus_to_std, mvn, std_mvn
 from lib.utils import gmm_negativeloglikelihood, gaussian_negativeloglikelihood
 from lib.geco import GECO
 import numpy as np
@@ -172,7 +172,7 @@ class ImageDecoder(nn.Module):
         output_size = 4
         small_grid_size = 6
         # Strides (2,2) with padding --- goes down to (8,8). From Slot Attention paper
-        if slot_attention_decoder == 'big':
+        if image_decoder == 'big':
             self.decode = nn.Sequential(
                 nn.ConvTranspose2d(z_size, 64, 5, 2, 2, output_padding=1),
                 nn.ReLU(True),
@@ -188,7 +188,7 @@ class ImageDecoder(nn.Module):
             )
             self.z_grid_shape = (small_grid_size, small_grid_size)
             self.positional_embedding = SlotAttention.create_positional_embedding(small_grid_size, small_grid_size, K * batch_size)
-        elif slot_attention_decoder == 'iodine':
+        elif image_decoder == 'iodine':
             self.decode = nn.Sequential(
                 nn.Conv2d(z_size, 64, 3, 1),
                 nn.ELU(True),
@@ -204,7 +204,7 @@ class ImageDecoder(nn.Module):
             self.positional_embedding = SlotAttention.create_positional_embedding(
                     self.z_grid_shape[0], self.z_grid_shape[1], K * batch_size)
 
-        elif slot_attention_decoder == 'small':
+        elif image_decoder == 'small':
             self.decode = nn.Sequential(
                 nn.Conv2d(z_size, 32, 5, 1, 1),
                 nn.ReLU(True),
@@ -587,7 +587,7 @@ class EfficientMORL(nn.Module):
                         else:
                             # z^l+1 ~ q(z^{l+1} | z^l, x)
                             z = posteriors[layer+1].rsample()
-                            loc_z, sp_z = self.object_discovery_block.indep_prior(z.view(-1, self.K, self.z_size))
+                            loc_z, sp_z = self.hvae_networks.indep_prior(z.view(-1, self.K, self.z_size))
                             loc_z = loc_z.view(self.batch_size * self.K, -1)
                             sp_z = sp_z.view(self.batch_size * self.K, -1)
                             # p(z^l | z^l+1)
@@ -602,7 +602,7 @@ class EfficientMORL(nn.Module):
                             prior_z = std_mvn(shape=[self.batch_size * self.K, self.z_size], device=x.device)
                         else:
                             z = posteriors[layer-1].rsample()
-                            loc_z, sp_z = self.object_discovery_block.indep_prior(z.view(-1, self.K, self.z_size))
+                            loc_z, sp_z = self.hvae_networks.indep_prior(z.view(-1, self.K, self.z_size))
                             loc_z = loc_z.view(self.batch_size * self.K, -1)
                             sp_z = sp_z.view(self.batch_size * self.K, -1)
                             prior_z = mvn(loc_z, sp_z)

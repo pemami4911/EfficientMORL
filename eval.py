@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torchvision
 import os
-import h5py
+import math
+import sklearn
 import numpy as np
 from PIL import Image
 from sacred import Experiment, cli_option
@@ -47,7 +48,6 @@ def cfg():
             'num_workers': 8,
             'DDP_port': 29500,
             'out_dir': '',
-            'checkpoint_dir': 'weights',
             'checkpoint': '',
             'use_geco': False,
             'geco_reconstruction_target': -20500,
@@ -75,68 +75,6 @@ def restore_from_checkpoint(test, checkpoint, local_rank):
     if test['use_geco']:
         model_geco = GECO(test['geco_reconstruction_target'], test['geco_ema_alpha'])
     return model, model_geco
-
-
-@ex.capture
-def do_eval(test, seed, _run):
-
-    # Fix random seed
-    print(f'setting random seed to {seed}')
-    
-    # Auto-set by sacred
-    # torch.manual_seed(seed)
-    torch.backends.cudnn.deterministic=True
-    torch.backends.cudnn.benchmark=False
-
-    local_rank = 'cuda:{}'.format(_run.info['local_rank'])
-    assert local_rank == 'cuda:0', 'Eval should be run with a single process'
-
-    os.environ['MASTER_ADDR'] = '127.0.0.1'
-    os.environ['MASTER_PORT'] = str(test['DDP_port'])
-    torch.distributed.init_process_group(backend='nccl')
-    #device = torch.device(f'cuda:{local_rank}')
-    torch.cuda.set_device(local_rank)
-
-    # Data
-    te_dataset = HdF5Dataset(d_set=test['mode'])
-    te_dataloader = torch.utils.data.DataLoader(te_dataset, batch_size=test['batch_size'],
-                                                shuffle=True, num_workers=test['num_workers'],
-                                                drop_last=True)
-    checkpoint = Path(test['checkpoint_dir'], test['checkpoint'])
-    
-    if test['experiment_name'] == 'NAME_HERE':
-        print('Please provide a valid name for this experiment')
-        exit(1)
-    
-    out_dir = Path(test['out_dir'], 'results', test['experiment_name'],
-                   checkpoint.stem + '.pth' + f'-seed={seed}')
-    if not out_dir.exists():
-        out_dir.mkdir(parents=True)
-    print(f'saving results in {out_dir}')
-
-    model, model_geco = restore_from_checkpoint(test, checkpoint, local_rank)
-    model.eval()
-
-    if test['eval_type'] == 'disentanglement_preprocessing':
-        # creates a file `z_range.txt` storing min/max values for each latent dim
-        _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_dir)
-    elif test['eval_type'] == 'disentanglement_viz':
-        # saves...
-        _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir)
-    elif test['eval_type'] == 'activeness':
-        # saves a numpy array of the average pixel variance for each latent dim
-        _activeness(test, te_dataloader, model, model_geco, out_dir)
-    elif test['eval_type'] == 'dci_clevr':
-        _dci_clevr(test, te_dataloader, model, model_geco, out_dir)
-    elif test['eval_type'] == 'ARI_MSE_KL':
-        _ari_mse_kl(test, te_dataloader, model, model_geco, out_dir)
-    elif test['eval_type'] == 'sample_viz':
-        _sample_viz(test, te_dataloader, model, model_geco, out_dir)
-
-
-@ex.automain
-def run(_run, seed):
-    do_eval(_run=_run, seed=seed)
 
 #####################################################
 ### Metrics definitions
@@ -196,12 +134,17 @@ def _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir):
             # for each latent dim
             for j in range(sampled_z.shape[-1]):
                 new_z = sampled_z.clone()
-                lower_lim = float(limits[j].split(',')[0])
-                upper_lim = float(limits[j].split(',')[1])
-                vals = torch.linspace(lower_lim, upper_lim, num_steps)
-                dim_images = []
                 new_z = new_z.view(test['batch_size'], model.module.K,
                                                        model.module.z_size)
+
+                lower_lim = float(limits[j].split(',')[0])
+                upper_lim = float(limits[j].split(',')[1])
+                midpoint = (upper_lim - lower_lim)/2.
+                lower_lim = midpoint - (math.sqrt(abs(midpoint-lower_lim)))
+                upper_lim = midpoint + (math.sqrt(abs(upper_lim-midpoint)))
+                vals = torch.linspace(lower_lim, upper_lim, num_steps)
+                dim_images = []
+                
                 # for each interp step reconstruct the image
                 for k in range(num_steps):
                     new_z[:,slot_id,j] = vals[k]
@@ -256,8 +199,6 @@ def _activeness(test, te_dataloader, model, model_geco, out_dir):
         elif test['model'] == 'SlotAttention':
             sampled_z = model(imgs)['slots']
         
-        all_images = []
-
         # randomly select a slot
         slot_id = np.random.randint(model.module.K)
         with torch.no_grad():
@@ -295,23 +236,20 @@ def _activeness(test, te_dataloader, model, model_geco, out_dir):
 
 def _dci_clevr(test, te_dataloader, model, model_geco, out_dir):
     total_images = 0
-    all_var = []
     for i,batch in enumerate(tqdm(te_dataloader)):
         if total_images >= test['num_images_to_process']:
             break
 
         imgs = batch['imgs'].to('cuda')
-
+        _, _, H, W = imgs.shape
         if test['model'] == 'EfficientMORL':
             posterior = model.module.two_stage_inference(imgs, model_geco,
                                                             i, 1., get_posterior=True)
             # Use the mean of the posterior distributions 
             q_mean = posterior.mean   # [N*K,D]
-            x_locs, mask_logits = model.module.hvae_networks.image_decoder(q_mean)
+            _, mask_logits = model.module.hvae_networks.image_decoder(q_mean)
             q_mean = q_mean.data.cpu().numpy()
-            mask_logits = mask_logits.view(test['batch_size'], model.module.K, 1,
-                                            test['output_size'][1],
-                                            test['output_size'][2])
+            mask_logits = mask_logits.view(test['batch_size'], model.module.K, 1,H,W)
             mask_logprobs = nn.functional.log_softmax(mask_logits, dim=1)
             pred_masks = mask_logprobs.exp()
         elif test['model'] == 'SlotAttention':
@@ -321,7 +259,7 @@ def _dci_clevr(test, te_dataloader, model, model_geco, out_dir):
         
         resized_masks = []
         # Resizing masks to match ground truth mask size on CLEVR6
-        if test['output_size'][1] == 96 or test['output_size'][1] == 192:
+        if test['output_size'][1] == 96 or test['output_size'][1] == 128:
             for slot_idx in range(pred_masks.shape[1]):
                 PIL_mask = Image.fromarray(
                          pred_masks[0,slot_idx,0].data.cpu().numpy(), mode="F")
@@ -368,7 +306,8 @@ def _dci_clevr(test, te_dataloader, model, model_geco, out_dir):
     # x, y, z, rot, size, material, shape, color
     factor_types = ['continuous', 'continuous', 'continuous', 'continuous', 'discrete', 'discrete', 'discrete', 'discrete']
 
-    X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(codes_dataset, factors_dataset, test_size=0.5, random_state=5, shuffle=True)
+    X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(
+             codes_dataset, factors_dataset, test_size=0.5, random_state=5, shuffle=True)
 
     print(X_train.shape, X_test.shape)
 
@@ -390,11 +329,9 @@ def _ari_mse_kl(test, te_dataloader, model, model_geco, out_dir):
 
         if test['model'] == 'EfficientMORL':
                 outs = model(imgs, model_geco, i, 1)
-        elif test['model'] == 'SlotAttention'
+        elif test['model'] == 'SlotAttention':
                 outs = model(imgs)
         
-        H = imgs.shape[2]
-        W = imgs.shape[3]
         if test['model'] == 'EfficientMORL':
             pred_means = outs[f'means_{model.module.stochastic_layers-1+model.module.refinement_iters}']
             mask_logprobs = outs[f'masks_{model.module.stochastic_layers-1+model.module.refinement_iters}']
@@ -404,10 +341,9 @@ def _ari_mse_kl(test, te_dataloader, model, model_geco, out_dir):
         pred_masks = mask_logprobs.exp()
         resized_masks = []
         pred_masks_ = pred_masks.data.cpu().numpy()
-        all_pred_masks += [pred_masks_]
 
         # Hack for resizing on CLEVR6
-        if test['output_size'][1] == 96 or test['output_size'][1] == 192:
+        if test['output_size'][1] == 96 or test['output_size'][1] == 128:
             for slot_idx in range(pred_masks.shape[1]):
                 PIL_mask = Image.fromarray(pred_masks_[0,slot_idx,0], mode="F")
                 PIL_mask = PIL_mask.resize((192,192))
@@ -455,18 +391,22 @@ def _sample_viz(test, te_dataloader, model, model_geco, out_dir):
         if total_images >= test['num_images_to_process']:
             break
 
+        imgs = batch['imgs'].to('cuda')
+        true_masks = batch['masks'].to('cuda')
+        
         rinfo = {}
         outs = model(imgs, model_geco, i, 1, debug=True)
         rinfo["data"] = {}
         imgs = (imgs + 1) / 2
         rinfo["data"]["image"] = imgs.permute(0,2,3,1).data.cpu().numpy()
-        rinfo["data"]["true_mask"] = batch["masks"].data.cpu().numpy()
+        rinfo["data"]["true_mask"] = true_masks.data.cpu().numpy()
 
         rinfo["outputs"] = {
             "recons": [],
             "pred_mask": [],
             "pred_mask_logits": [],
-            "components": []
+            "components": [],
+            "attention": []            
         }
         for t in range(model.module.stochastic_layers+model.module.refinement_iters):
             pred_mask_logits = outs[f"masks_{t}"]
@@ -478,10 +418,81 @@ def _sample_viz(test, te_dataloader, model, model_geco, out_dir):
             rinfo["outputs"]["pred_mask_logits"] += [pred_mask_logits]
             rinfo["outputs"]["recons"] += [recons]
             rinfo["outputs"]["components"] += [components]
+            if t < model.module.stochastic_layers:
+                rinfo["outputs"]["attention"] += [outs[f"attn_{t}"]]
+            else:
+                rinfo["outputs"]["attention"] += [outs[f"attn_{model.module.stochastic_layers-1}"]]
+
         rinfo["outputs"]["pred_mask"] = torch.stack(rinfo["outputs"]["pred_mask"], 1).permute(0,1,2,4,5,3).data.cpu().numpy()
         rinfo["outputs"]["pred_mask_logits"] = torch.stack(rinfo["outputs"]["pred_mask_logits"], 1).permute(0,1,2,4,5,3).data.cpu().numpy()
         rinfo["outputs"]["recons"] = torch.stack(rinfo["outputs"]["recons"], 1).permute(0,1,3,4,2).data.cpu().numpy()
         rinfo["outputs"]["components"] = torch.stack(rinfo["outputs"]["components"], 1).permute(0,1,2,4,5,3).data.cpu().numpy()
+        rinfo["outputs"]["attention"] = torch.stack(rinfo["outputs"]["attention"], 1).permute(0,1,2,4,5,3).data.cpu().numpy()
+
         pkl.dump(rinfo, open(out_dir / f'rinfo_{i}.pkl', 'wb'))
         
         total_images += imgs.shape[0]
+
+#####################################################
+### Evaluation 
+#####################################################
+@ex.capture
+def do_eval(test, seed, _run):
+
+    # Fix random seed
+    print(f'setting random seed to {seed}')
+    
+    # Auto-set by sacred
+    torch.backends.cudnn.deterministic=True
+    torch.backends.cudnn.benchmark=False
+
+    local_rank = 'cuda:{}'.format(_run.info['local_rank'])
+    assert local_rank == 'cuda:0', 'Eval should be run with a single process'
+
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = str(test['DDP_port'])
+    torch.distributed.init_process_group(backend='nccl')
+    torch.cuda.set_device(local_rank)
+
+    # Data
+    te_dataset = HdF5Dataset(d_set=test['mode'])
+    te_dataloader = torch.utils.data.DataLoader(te_dataset, batch_size=test['batch_size'],
+                                                shuffle=True, num_workers=test['num_workers'],
+                                                drop_last=True)
+    checkpoint = Path(test['out_dir'], 'weights', test['checkpoint'])
+    
+    if test['experiment_name'] == 'NAME_HERE':
+        print('Please provide a valid name for this experiment')
+        exit(1)
+    
+    out_dir = Path(test['out_dir'], 'results', test['experiment_name'],
+                   checkpoint.stem + '.pth' + f'-seed={seed}')
+    if not out_dir.exists():
+        out_dir.mkdir(parents=True)
+    print(f'saving results in {out_dir}')
+
+    model, model_geco = restore_from_checkpoint(test, checkpoint, local_rank)
+    model.eval()
+
+    if test['eval_type'] == 'disentanglement_preprocessing':
+        # creates a file `z_range.txt` storing min/max values for each latent dim
+        _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'disentanglement_viz':
+        # saves a # latent dims (e.g., 64) x num_steps (e.g., 8) array of reconstructed images
+        _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'activeness':
+        # saves a numpy array of the average pixel variance for each latent dim
+        _activeness(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'dci_clevr':
+        # prints and saves a text file of the DCI scores
+        _dci_clevr(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'ARI_MSE_KL':
+        # prints and saves text files of the scores
+        _ari_mse_kl(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'sample_viz':
+        # saves a pickled dict rinfo of the visualizations, see notebooks/demo.ipynb
+        _sample_viz(test, te_dataloader, model, model_geco, out_dir)
+
+@ex.automain
+def run(_run, seed):
+    do_eval(_run=_run, seed=seed)

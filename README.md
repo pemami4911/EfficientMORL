@@ -1,5 +1,7 @@
 <img src="./examples/1.gif" width="150px"></img>
 <img src="./examples/2.gif" width="150px"></img>
+<img src="./examples/3.gif" width="150px"></img>
+<img src="./examples/4.gif" width="150px"></img>
 
 # EfficientMORL
 
@@ -92,6 +94,14 @@ $ tensorboard --logdir $OUT_DIR/tb
 
 and open in your browser.
 
+#### Pre-trained Tetrominoes model
+
+If you would like to skip training and just play around with a pre-trained model, we provide the following set of pre-trained weights in `./examples`:
+
+| checkpoint | ARI | MSE | KL | wall clock training | hardware | 
+| --- | --- | --- | --- | --- | --- | 
+| emorl-tetrominoes-seed-1200-state-200000.pth | 99.7 | 2.76 x 10^-4 | 70.7 | 5 hrs 2 min | 2x Geforce RTX 2080Ti |
+
 ### Model variants & hyperparameters
 
 | Parameter | Usage | 
@@ -125,7 +135,6 @@ Go to `./scripts`. Open `eval.sh` for editing and update the following variables
 DATA_PATH=#Set to the absolute path of the folder where the unzipped .h5 files are
 OUT_DIR=#Set to the absolute path of the folder where you will save eval results in, probably same path set for training
 CHECKPOINT=#Set to the name of the .pth file saved in the `weights` directory in $OUT_DIR
-CHECKPOINT_DIR=#Absolute path where checkpoint is located, should be `$OUT_DIR`/weights
 ```
 
  After setting the other variables depending on the desired metric (see below), run the script:

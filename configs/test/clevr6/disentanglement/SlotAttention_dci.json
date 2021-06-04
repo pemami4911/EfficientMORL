@@ -26,8 +26,7 @@
       "model": "SlotAttention",
       "experiment_name": "clevr_disentanglement",
       "out_dir": "",
-      "checkpoint": "",
-      "checkpoint_dir": ""
+      "checkpoint": ""
     }
   }
   

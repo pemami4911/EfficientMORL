@@ -35,8 +35,7 @@
       "model": "EfficientMORL",
       "experiment_name": "visualizations",
       "out_dir": "",
-      "checkpoint": "",
-      "checkpoint_dir": ""
+      "checkpoint": ""
     }
   }
   

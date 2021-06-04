@@ -28,19 +28,20 @@ class HdF5Dataset(torch.utils.data.Dataset):
     """
     @ds.capture
     def __init__(self, data_path, h5_path, masks, factors, clevr_preprocess_style, 
-                 image_range, d_set='train'):
+                 d_set='train'):
         super(HdF5Dataset, self).__init__()
         self.h5_path = str(Path(data_path, h5_path))
         self.d_set = d_set.lower()
         self.masks = masks
         self.factors = factors
         self.clevr_preprocess_style = clevr_preprocess_style
-        self.image_range = image_range
 
 
     def preprocess(self, img):
         """
-        img is assumed to be an array of integers each in 0-255
+        img is assumed to be an array of integers each in 0-255 
+        We preprocess them by mapping the range to -1,1
+        
         """
         PIL_img = Image.fromarray(np.uint8(img))
         # square center crop of 192 x 192

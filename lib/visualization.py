@@ -40,6 +40,6 @@ def visualize_output(writer, batch_data, model_outs, num_stochastic_layers, num_
         writer.add_image(f'RGB_level_{i}', mean_iter_grid, step)
         writer.add_image(f'masks_level_{i}', mask_iter_grid, step)
         writer.add_image(f'reconstruction_level_{i}', recon_grid, step)
-        writer.add_image(f'attn_level_{num_stoch_layers-1}', attn, step)
+        writer.add_image(f'attn_level_{num_stochastic_layers-1}', attn, step)
         writer.add_image('image', imgs, step)
 

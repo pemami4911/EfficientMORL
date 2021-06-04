@@ -32,7 +32,6 @@
     "model": "EfficientMORL",
     "experiment_name": "Multi_Object_Datasets",
     "out_dir": "",
-    "checkpoint": "",
-    "checkpoint_dir": ""
+    "checkpoint": ""
   }
 }

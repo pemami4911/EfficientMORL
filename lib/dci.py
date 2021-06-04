@@ -27,11 +27,11 @@ from six.moves import range
 from sklearn import ensemble
 
 
-def _compute_dci(mus_train, ys_train, mus_test, ys_test, factor_types, ensemble='gbt'):
+def _compute_dci(mus_train, ys_train, mus_test, ys_test, factor_types, model='gbt'):
   """Computes score based on both training and testing codes and factors."""
   scores = {}
   importance_matrix, train_err, test_err = compute_importance(
-      mus_train, ys_train, mus_test, ys_test, factor_types, ensemble)
+      mus_train, ys_train, mus_test, ys_test, factor_types, model)
   assert importance_matrix.shape[0] == mus_train.shape[0]
   assert importance_matrix.shape[1] == ys_train.shape[0]
   scores["informativeness_train"] = train_err
@@ -41,11 +41,11 @@ def _compute_dci(mus_train, ys_train, mus_test, ys_test, factor_types, ensemble=
   return scores
 
 
-def compute_importance(x_train, y_train, x_test, y_test, factor_types, ensemble='gbt'):
+def compute_importance(x_train, y_train, x_test, y_test, factor_types, model='gbt'):
   """Compute importance
      
      factor_types: 'discrete' aka classification, or 'continuous' aka regression
-     ensemble: 'gbt' aka GradientBoostingTrees or 'rf' aka RandomForest
+     model: 'gbt' aka GradientBoostingTrees or 'rf' aka RandomForest
   """
   num_factors = y_train.shape[0]
   num_codes = x_train.shape[0]
@@ -55,13 +55,13 @@ def compute_importance(x_train, y_train, x_test, y_test, factor_types, ensemble=
   test_loss = []
   for i in range(num_factors):
     typ = factor_types[i]
-    if ensemble == 'gbt' and typ == 'discrete':
+    if model == 'gbt' and typ == 'discrete':
       model = ensemble.GradientBoostingClassifier()
-    elif ensemble == 'gbt' and typ == 'continuous':
+    elif model == 'gbt' and typ == 'continuous':
       model = ensemble.GradientBoostingRegressor()
-    elif ensemble == 'rf' and typ == 'discrete':
+    elif model == 'rf' and typ == 'discrete':
       model = ensemble.RandomForestClassifier()
-    elif ensemble == 'rf' and typ == 'continuous':
+    elif model == 'rf' and typ == 'continuous':
       model = ensemble.RandomForestRegressor()
     model.fit(x_train.T, y_train[i, :])
     importance_matrix[:, i] = np.abs(model.feature_importances_)
