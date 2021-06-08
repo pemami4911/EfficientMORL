@@ -19,7 +19,7 @@ To achieve efficiency, the key ideas were to cast iterative assignment of pixels
 
 <img src="./examples/main.png" width="800px"></img>
 
-See the [paper]() for more details.
+See the [paper](https://arxiv.org/abs/2106.03630) for more details.
 
 ## Installation
 
