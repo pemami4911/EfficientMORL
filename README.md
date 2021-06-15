@@ -217,4 +217,11 @@ See `./notebooks/demo.ipynb` for the code used to generate figures like Figure 6
 
 ## Citation
 
-TBD
+```
+@article{emami2021efficient,
+  title={Efficient Iterative Amortized Inference for Learning Symmetric and Disentangled Multi-Object Representations},
+  author={Emami, Patrick and He, Pan and Ranka, Sanjay and Rangarajan, Anand},
+  journal={arXiv preprint arXiv:2106.03630},
+  year={2021}
+}
+```
