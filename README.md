@@ -218,10 +218,18 @@ See `./notebooks/demo.ipynb` for the code used to generate figures like Figure 6
 ## Citation
 
 ```
-@article{emami2021efficient,
-  title={Efficient Iterative Amortized Inference for Learning Symmetric and Disentangled Multi-Object Representations},
-  author={Emami, Patrick and He, Pan and Ranka, Sanjay and Rangarajan, Anand},
-  journal={arXiv preprint arXiv:2106.03630},
-  year={2021}
+@InProceedings{pmlr-v139-emami21a,
+  title = 	 {Efficient Iterative Amortized Inference for Learning Symmetric and Disentangled Multi-Object Representations},
+  author =       {Emami, Patrick and He, Pan and Ranka, Sanjay and Rangarajan, Anand},
+  booktitle = 	 {Proceedings of the 38th International Conference on Machine Learning},
+  pages = 	 {2970--2981},
+  year = 	 {2021},
+  editor = 	 {Meila, Marina and Zhang, Tong},
+  volume = 	 {139},
+  series = 	 {Proceedings of Machine Learning Research},
+  month = 	 {18--24 Jul},
+  publisher =    {PMLR},
+  url = 	 {http://proceedings.mlr.press/v139/emami21a.html},
 }
+
 ```
