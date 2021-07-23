@@ -5,7 +5,7 @@
 
 # EfficientMORL
 
-Official implementation of the ICML'21 paper "Efficient Iterative Amortized Inference for Learning Symmetric and Disentangled Multi-object Representations". 
+Official implementation of our ICML'21 paper "Efficient Iterative Amortized Inference for Learning Symmetric and Disentangled Multi-object Representations" [Link](http://proceedings.mlr.press/v139/emami21a.html). 
 
 ### 30,000 feet
 
@@ -19,7 +19,7 @@ To achieve efficiency, the key ideas were to cast iterative assignment of pixels
 
 <img src="./examples/main.png" width="800px"></img>
 
-See the [paper](https://arxiv.org/abs/2106.03630) for more details.
+See the [paper](http://proceedings.mlr.press/v139/emami21a.html) for more details.
 
 ## Installation
 
