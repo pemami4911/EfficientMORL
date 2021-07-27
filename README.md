@@ -7,6 +7,8 @@
 
 Official implementation of our ICML'21 paper "Efficient Iterative Amortized Inference for Learning Symmetric and Disentangled Multi-object Representations" [Link](http://proceedings.mlr.press/v139/emami21a.html). 
 
+[Watch our YouTube explainer video](https://youtu.be/4SDXQxBu_D8)
+
 ### 30,000 feet
 
 The motivation of this work is to design a deep generative model for learning high-quality representations of multi-object scenes. Generally speaking, we want a model that 
