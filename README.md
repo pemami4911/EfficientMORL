@@ -121,6 +121,8 @@ Here are the hyperparameters we used for this paper:
 | Tetrominoes | 35 x 35 |  Gaussian       | 0.3 | -4500 | 
 | CLEVR6      | 96 x 96 |  Mixture of Gaussians | 0.1 |  -61000  |
 
+We found GECO wasn't needed for Multi-dSprites to achieve stable convergence across many random seeds and a good trade-off of reconstruction and KL. 
+
 **Choosing the reconstruction target:** I have come up with the following heuristic to quickly set the reconstruction target for a new dataset without investing much effort:
 1. Choose a random initial value somewhere in the ballpark of where the reconstruction error should be (e.g., for CLEVR6 128 x 128, we may guess -96000 at first).
 2. Start training and monitor the reconstruction error (e.g., in Tensorboard) for the first ~10K steps of training. EMORL (and any pixel-based object-centric generative model) will in general learn to reconstruct the background first. This accounts for a large amount of the reconstruction error.
