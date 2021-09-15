@@ -34,6 +34,7 @@ $ conda env create -f environment.yml
 To install the conda environment in a desired directory, add a prefix to the environment file first.
 
 For example, add this line to the end of the environment file: `prefix: /home/{YOUR_USERNAME}/.conda/envs`
+
 ## Multi-Object Datasets
 
 A zip file containing the datasets used in this paper can be downloaded from [here](http://doi.org/10.5281/zenodo.4895643). 
@@ -103,6 +104,28 @@ If you would like to skip training and just play around with a pre-trained model
 | checkpoint | ARI | MSE | KL | wall clock training | hardware | 
 | --- | --- | --- | --- | --- | --- | 
 | emorl-tetrominoes-seed-1200-state-200000.pth | 99.7 | 2.76 x 10^-4 | 70.7 | 5 hrs 2 min | 2x Geforce RTX 2080Ti |
+
+### On using GECO for stabilizing training
+
+We found that on the following two datasets in the Multi-Object Datasets benchmark, using [GECO](https://arxiv.org/abs/1810.00597) helped to stabilize training across random seeds and improve sample efficiency, on top of using lightweight iterative amortized inference.
+
+GECO is an excellent optimization tool for "taming" VAEs that helps with two key aspects:
+1. **Dynamically adjusts a hyperparameter that trades off the reconstruction and KL losses**, which improves training robustness to poor weight initializations from a "bad" random seed.
+2. **Reduces variance** in the gradients of the ELBO by minimizing the distance of an exponential moving average (EMA) of the reconstruction error to a pre-specified target reconstruction error (an easier constrained minimization), instead of trying to directly minimize the error (a harder unconstrained minimization). Lower variance results in faster convergence.
+
+The caveat is we have to specify the desired reconstruction target for each dataset, which depends on the image resolution and image likelihood. 
+Here are the hyperparameters we used for this paper:
+
+| dataset | resolution | image likelihood | global std dev | GECO reconstruction target | 
+| ---     | ---  | --- | ---                 | --- |
+| Tetrominoes | 35 x 35 |  Gaussian       | 0.3 | -4500 | 
+| CLEVR6      | 96 x 96 |  Mixture of Gaussians | 0.1 |  -61000  |
+
+**Choosing the reconstruction target:** I have come up with the following heuristic to quickly set the reconstruction target for a new dataset without investing much effort:
+1. Choose a random initial value somewhere in the ballpark of where the reconstruction error should be (e.g., for CLEVR6 128 x 128, we may guess -96000 at first).
+2. Start training and monitor the reconstruction error (e.g., in Tensorboard) for the first ~10K steps of training. EMORL (and any pixel-based object-centric generative model) will in general learn to reconstruct the background first. This accounts for a large amount of the reconstruction error.
+3. Stop training, and adjust the reconstruction target to be about -1000 or -2000 smaller then the value that the reconstruction error settles into within the first 10K training steps. This will greatly reduce the variance (since `EMA(recon_error) - target` is now very small) and will allow GECO to gently increase its Lagrange parameter until foreground objects are discovered.
+4. Once foreground objects are discovered, the EMA of the reconstruction error should be lower than the target (perhaps by no more than about -1000 or so, in Tensorboard `geco_C_ema` will be a positive value) so that the GECO Lagrange parameter will decrease back to 1. This is important so that the model estimates a proper ELBO at the end of training.
 
 ### Model variants & hyperparameters
 
