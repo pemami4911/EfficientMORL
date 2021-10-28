@@ -1,7 +1,8 @@
 import torch
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data.distributed import DistributedSampler
-from sacred import Experiment, cli_option
+from sacred import Experiment
+import datetime
 from tqdm import tqdm
 from pathlib import Path
 import os
@@ -9,17 +10,22 @@ import numpy as np
 from warmup_scheduler import GradualWarmupScheduler
 from lib.datasets import ds
 from lib.datasets import HdF5Dataset
+from lib.third_party.clevrtex_eval import CLEVRTEX, collate_fn, texds
 from lib.model import net
 from lib.model import EfficientMORL, SlotAttention
 from lib.geco import GECO
 from lib.visualization import visualize_output, visualize_slots
+from sacred.observers import FileStorageObserver
 
 
-@cli_option('-r','--local_rank')
-def local_rank_option(args, run):
-    run.info['local_rank'] = args
-
-ex = Experiment('TRAINING', ingredients=[ds, net], additional_cli_options=[local_rank_option])
+ex = Experiment('TRAINING', ingredients=[ds,texds, net])
+local_rank = os.environ['LOCAL_RANK']
+if local_rank == '0':
+    # optionally set the env variable "SACRED_OBSERVATORY" 
+    # to a path to store sacred run files
+    sacred_run_dir = os.environ['SACRED_OBSERVATORY']
+    if sacred_run_dir != '':
+        ex.observers.append(FileStorageObserver(sacred_run_dir))
 
 @ex.config
 def cfg():
@@ -46,6 +52,7 @@ def cfg():
             'use_geco': True,  # Use GECO (Rezende & Viola 2018)
             'clip_grad_norm': True,  # Grad norm clipping to 5.0
             'geco_reconstruction_target': -23000,  # GECO C
+            'geco_step_size_acceleration': 1,  # multiplies beta once the target is reached
             'geco_ema_alpha': 0.99,  # GECO EMA step parameter
             'geco_beta_stepsize': 1e-6,  # GECO Lagrange parameter beta
             'tqdm': False  # Show training progress in CLI
@@ -64,6 +71,7 @@ def save_checkpoint(step, kl_beta, model, model_opt, filepath):
 
 @ex.automain
 def run(training, seed, _run):
+    global local_rank
 
     run_dir = Path(training['out_dir'], 'runs')
     checkpoint_dir = Path(training['out_dir'], 'weights')
@@ -79,15 +87,17 @@ def run(training, seed, _run):
             print(f'Create {dir_} before running!')
             exit(1)
 
-    tb_dbg = tb_dir / training['run_suffix']
+    tb_dbg = tb_dir / (training['run_suffix'] + '_' + \
+                       datetime.datetime.now().strftime("%Y-%m-%d--%H-%M-%S"))
 
-    local_rank = 'cuda:{}'.format(_run.info['local_rank'])
+    #local_rank = 'cuda:{}'.format(_run.info['local_rank'])
+    local_rank = f'cuda:{local_rank}'
     if local_rank == 'cuda:0':
         print(f'Creating SummaryWriter! ({local_rank})')
         writer = SummaryWriter(tb_dbg)
     
     # Fix random seed
-    print(f'setting random seed to {seed}')
+    print(f'Local rank: {local_rank}. Setting random seed to {seed}')
     # Auto-set by sacred
     # torch.manual_seed(seed)
     torch.backends.cudnn.deterministic=True
@@ -110,14 +120,19 @@ def run(training, seed, _run):
     
     model_geco = None
     if training['use_geco']:
-        model_geco = GECO(training['geco_reconstruction_target'],
-                          training['geco_ema_alpha'])        
+        C, H, W = model.input_size
+        recon_target = training['geco_reconstruction_target'] * (C * H * W)
+        model_geco = GECO(recon_target,
+                          training['geco_ema_alpha'],
+                          training['geco_step_size_acceleration'])        
     
     model = model.to(local_rank)
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank],
                                                       output_device=local_rank,
                                                       find_unused_parameters=True)
     model.train()
+    if local_rank == 'cuda:0':
+        print(model)
 
     # Optimization
     model_opt = torch.optim.Adam(model.parameters(), lr=training['lr'])
@@ -135,7 +150,6 @@ def run(training, seed, _run):
     if not training['load_from_checkpoint']:    
         step = 0 
         kl_beta = training['kl_beta_init']
-        checkpoint_step = 0
     else:
         checkpoint = checkpoint_dir / training['checkpoint']
         map_location = {'cuda:0': local_rank}
@@ -144,10 +158,16 @@ def run(training, seed, _run):
         model_opt.load_state_dict(state['model_opt'])
         kl_beta = state['kl_beta']
         step = state['step']
-        checkpoint_step = step
 
 
-    tr_dataset = HdF5Dataset(d_set=training['mode'])
+    if "clevrtex" in training['run_suffix']:
+        tr_dataset = CLEVRTEX(dataset_variant='full',
+                              split='train',
+                              crop=True,
+                              resize=(128,128),
+                              return_metadata=False)
+    else:
+        tr_dataset = HdF5Dataset(d_set=training['mode'])
     batch_size = training['batch_size']
     tr_sampler = DistributedSampler(dataset=tr_dataset)
 
@@ -165,7 +185,6 @@ def run(training, seed, _run):
     print('Num parameters: {}'.format(sum(p.numel() for p in model.parameters())))
 
     epoch_idx = 0
-    refinement_curriculum_counter = 0
 
     while step <= max_iters:
         
@@ -184,7 +203,12 @@ def run(training, seed, _run):
                     model.module.refinement_iters = training['refinement_curriculum'][rf][1]
                     break
             
-            img_batch = batch['imgs'].to(local_rank)
+            if 'clevrtex' in training['run_suffix']:
+                _, img_batch, mask_batch = batch
+                img_batch = img_batch.to(local_rank)
+                img_batch = (img_batch * 2) - 1
+            else:
+                img_batch = batch['imgs'].to(local_rank)
             model_opt.zero_grad()
 
             # Forward

@@ -1,42 +1,37 @@
 {
     "Net": {
-      "K": 7,
+      "K": 11,
       "input_size": [
         3,
-        96, 
-        96
+        128, 
+        128
       ],
       "image_likelihood": "GMM",
       "z_size": 64,
       "image_decoder": "iodine",
       "stochastic_layers": 3,
-      "refinement_iters": 1,
+      "refinement_iters": 2,
       "log_scale": -2.3025859,
       "bottom_up_prior": false,
       "reverse_prior_plusplus": true,
       "use_DualGRU": true
     },
-    "dataset": {
-      "data_path": "",
-      "h5_path": "clevr6_with_masks_and_factors_test.h5",
-      "masks": true,
-      "clevr_preprocess_style": "clevr-small"
-    },
     "seed": 1,
     "test": {
       "batch_size":1,
-      "output_size": [3,96,96],
-      "num_images_to_process": 100,
+      "output_size": [3,128,128],
+      "num_images_to_process": 100000,
       "use_geco": true,
       "geco_beta_stepsize": 1e-06,
       "geco_ema_alpha": 0.99,
-      "geco_reconstruction_target": -2.206,      
-      "eval_type": "activeness",
+      "geco_reconstruction_target": -1.5,      
+      "eval_type": "clevrtex",
       "mode": "test",
       "model": "EfficientMORL",
-      "experiment_name": "clevr_disentanglement",
+      "experiment_name": "clevrtex-grassbg",
       "out_dir": "",
-      "checkpoint": ""
+      "checkpoint": "",
+      "clevrtex_variant": "grassbg"
     }
   }
   

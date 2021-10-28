@@ -29,7 +29,7 @@
       "use_geco": true,
       "geco_beta_stepsize": 1e-06,
       "geco_ema_alpha": 0.99,
-      "geco_reconstruction_target": -61000,      
+      "geco_reconstruction_target": -2.206,      
       "eval_type": "ARI_MSE_KL",
       "mode": "test",
       "model": "EfficientMORL",

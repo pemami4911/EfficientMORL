@@ -6,7 +6,7 @@ import math
 import sklearn
 import numpy as np
 from PIL import Image
-from sacred import Experiment, cli_option
+from sacred import Experiment
 from lib.datasets import ds
 from lib.datasets import HdF5Dataset
 from lib.model import net
@@ -14,16 +14,15 @@ from lib.model import EfficientMORL, SlotAttention
 from lib.geco import GECO
 from lib.metrics import adjusted_rand_index, matching_iou
 from lib.dci import _compute_dci
+# https://github.com/karazijal/clevrtex-generation
+from lib.third_party import clevrtex_eval
 from pathlib import Path
 from tqdm import tqdm 
 import pickle as pkl
 
 
-@cli_option('-r','--local_rank')
-def local_rank_option(args, run):
-    run.info['local_rank'] = args
-
-ex = Experiment('EVAL', ingredients=[ds, net], additional_cli_options=[local_rank_option])
+ex = Experiment('EVAL', ingredients=[ds, net, clevrtex_eval.texds])
+local_rank = os.environ['LOCAL_RANK']
 
 torch.set_printoptions(threshold=10000, linewidth=300)
 
@@ -52,8 +51,10 @@ def cfg():
             'use_geco': False,
             'geco_reconstruction_target': -20500,
             'geco_ema_alpha': 0.99,
+            'geco_step_size_acceleration': 1,
             'geco_beta_stepsize': 1e-6,
-            'experiment_name': 'NAME_HERE'
+            'experiment_name': 'NAME_HERE',
+            'clevrtex_variant': 'full'
         }
 
 def restore_from_checkpoint(test, checkpoint, local_rank):
@@ -73,7 +74,11 @@ def restore_from_checkpoint(test, checkpoint, local_rank):
     print(f'loaded {checkpoint}')
     model_geco = None
     if test['use_geco']:
-        model_geco = GECO(test['geco_reconstruction_target'], test['geco_ema_alpha'])
+        C, H, W = model.module.input_size
+        recon_target = test['geco_reconstruction_target'] * (C * H * W)
+        model_geco = GECO(recon_target,
+                          test['geco_ema_alpha'],
+                          test['geco_step_size_acceleration']) 
     return model, model_geco
 
 #####################################################
@@ -90,7 +95,8 @@ def _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_d
     
         if test['model'] == 'EfficientMORL':
             posterior = model.module.two_stage_inference(imgs, model_geco,
-                                                 i, 1., get_posterior=True)
+                                                 model.module.geco_warm_start+1, 1,
+                                                 get_posterior=True)
             sampled_z = posterior.sample()
         elif test['model'] == 'SlotAttention':
             sampled_z = model(imgs)['slots']
@@ -125,7 +131,8 @@ def _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir):
         num_steps = 8
         if test['model'] == 'EfficientMORL':
             posterior = model.module.two_stage_inference(imgs, model_geco,
-                                                    i, 1., get_posterior=True)
+                                                    model.module.geco_warm_start+1, 1,
+                                                    get_posterior=True)
             sampled_z = posterior.sample()
         else:
             sampled_z = model(imgs)['slots']
@@ -194,7 +201,8 @@ def _activeness(test, te_dataloader, model, model_geco, out_dir):
         num_steps = 6
         if test['model'] == 'EfficientMORL':
             posterior = model.module.two_stage_inference(imgs, model_geco,
-                                                         i, 1., get_posterior=True)
+                                                         model.module.geco_warm_start+1, 1,
+                                                         get_posterior=True)
             sampled_z = posterior.sample()
         elif test['model'] == 'SlotAttention':
             sampled_z = model(imgs)['slots']
@@ -244,7 +252,8 @@ def _dci_clevr(test, te_dataloader, model, model_geco, out_dir):
         _, _, H, W = imgs.shape
         if test['model'] == 'EfficientMORL':
             posterior = model.module.two_stage_inference(imgs, model_geco,
-                                                            i, 1., get_posterior=True)
+                                                        model.module.geco_warm_start+1, 1,
+                                                        get_posterior=True)
             # Use the mean of the posterior distributions 
             q_mean = posterior.mean   # [N*K,D]
             _, mask_logits = model.module.hvae_networks.image_decoder(q_mean)
@@ -328,7 +337,7 @@ def _ari_mse_kl(test, te_dataloader, model, model_geco, out_dir):
         true_masks = batch['masks'].to('cuda')
 
         if test['model'] == 'EfficientMORL':
-                outs = model(imgs, model_geco, i, 1)
+                outs = model(imgs, model_geco, model.module.geco_warm_start+1, 1)
         elif test['model'] == 'SlotAttention':
                 outs = model(imgs)
         
@@ -391,11 +400,17 @@ def _sample_viz(test, te_dataloader, model, model_geco, out_dir):
         if total_images >= test['num_images_to_process']:
             break
 
-        imgs = batch['imgs'].to('cuda')
-        true_masks = batch['masks'].to('cuda')
+        if 'clevrtex' in test['experiment_name']:
+            _, imgs, true_masks = batch
+            true_masks = true_masks.to(local_rank)
+            imgs = imgs.to(local_rank)
+            imgs = (imgs * 2) - 1
+        else:
+            imgs = batch['imgs'].to('cuda')
+            true_masks = batch['masks'].to('cuda')
         
         rinfo = {}
-        outs = model(imgs, model_geco, i, 1, debug=True)
+        outs = model(imgs, model_geco, model.module.geco_warm_start+1, 1, debug=True)
         rinfo["data"] = {}
         imgs = (imgs + 1) / 2
         rinfo["data"]["image"] = imgs.permute(0,2,3,1).data.cpu().numpy()
@@ -433,12 +448,49 @@ def _sample_viz(test, te_dataloader, model, model_geco, out_dir):
         
         total_images += imgs.shape[0]
 
+def _clevrtex(test, te_dataloader, model, model_geco, out_dir):
+    texeval = clevrtex_eval.CLEVRTEX_Evaluator()
+    total_images = 0
+    for i,batch in enumerate(tqdm(te_dataloader)):
+        if total_images >= test['num_images_to_process']:
+            break
+        
+        if 'clevrtex' in test['experiment_name']:
+            _, imgs, true_masks = batch
+            true_masks = true_masks.to(local_rank)
+            imgs = imgs.to(local_rank)
+            imgs = (imgs * 2) - 1
+        else:
+            imgs = batch['imgs'].to('cuda')
+            true_masks = batch['masks'].to('cuda')
+            _, max_num_entities, _, _, _ = true_masks.shape
+            true_masks = true_masks.permute(0,2,3,4,1).contiguous()
+            for i in range(max_num_entities):
+                mask = (true_masks[...,i] == 255)
+                true_masks[...,i][mask] = i
+            true_masks, _ = torch.max(true_masks, dim=-1)  # [N,1,H,W]
+            true_masks = nn.functional.interpolate(true_masks, mode='nearest', size=(128,128))
+
+        total_images += imgs.shape[0]
+                
+        
+        outs = model(imgs, model_geco, model.module.geco_warm_start+1, 1)
+        pred_means = outs[f'means_{model.module.stochastic_layers-1+model.module.refinement_iters}']
+        mask_logprobs = outs[f'masks_{model.module.stochastic_layers-1+model.module.refinement_iters}']
+        pred_masks = mask_logprobs.exp()
+        pred_imgs = (pred_means * pred_masks).sum(1)
+        imgs = (imgs + 1) / 2.
+        #import pdb; pdb.set_trace()
+        texeval.update(pred_imgs,pred_masks,imgs,true_masks)
+    for k,v in texeval.stats.items():
+        print(k, str(v))
+
 #####################################################
 ### Evaluation 
 #####################################################
 @ex.capture
 def do_eval(test, seed, _run):
-
+    global local_rank
     # Fix random seed
     print(f'setting random seed to {seed}')
     
@@ -446,7 +498,7 @@ def do_eval(test, seed, _run):
     torch.backends.cudnn.deterministic=True
     torch.backends.cudnn.benchmark=False
 
-    local_rank = 'cuda:{}'.format(_run.info['local_rank'])
+    local_rank = 'cuda:{}'.format(local_rank)
     assert local_rank == 'cuda:0', 'Eval should be run with a single process'
 
     os.environ['MASTER_ADDR'] = '127.0.0.1'
@@ -455,7 +507,14 @@ def do_eval(test, seed, _run):
     torch.cuda.set_device(local_rank)
 
     # Data
-    te_dataset = HdF5Dataset(d_set=test['mode'])
+    if "clevrtex" in test['experiment_name']:
+        te_dataset = clevrtex_eval.CLEVRTEX(dataset_variant=test['clevrtex_variant'],
+                              split=test['mode'],
+                              crop=True,
+                              resize=(128,128),
+                              return_metadata=False)
+    else:
+        te_dataset = HdF5Dataset(d_set=test['mode'])
     te_dataloader = torch.utils.data.DataLoader(te_dataset, batch_size=test['batch_size'],
                                                 shuffle=True, num_workers=test['num_workers'],
                                                 drop_last=True)
@@ -492,6 +551,8 @@ def do_eval(test, seed, _run):
     elif test['eval_type'] == 'sample_viz':
         # saves a pickled dict rinfo of the visualizations, see notebooks/demo.ipynb
         _sample_viz(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'clevrtex':
+        _clevrtex(test, te_dataloader, model, model_geco, out_dir)
 
 @ex.automain
 def run(_run, seed):

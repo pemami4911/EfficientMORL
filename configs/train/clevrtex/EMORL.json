@@ -1,43 +1,40 @@
 {
     "Net": {
-      "K": 4,
+      "K": 11,
       "input_size": [
         3,
-        35, 
-        35
+        128, 
+        128
       ],
-      "image_likelihood": "Gaussian",
-      "z_size": 32,
-      "image_decoder": "small",
+      "image_likelihood": "GMM",
+      "z_size": 64,
+      "image_decoder": "iodine",
       "stochastic_layers": 3,
-      "log_scale": -1.2039728,
+      "log_scale": -2.3025859,
       "bottom_up_prior": false,
       "reverse_prior_plusplus": true,
       "use_DualGRU": true
-    },
-    "dataset": {
-      "data_path": "",
-      "h5_path": "tetrominoes.h5",
-      "masks": false
     },
     "seed": 1,
     "training": {
       "batch_size": 32,
       "kl_beta_init": 1,
+      "mode": "test",
       "use_geco": true,
       "use_scheduler": true,
       "geco_beta_stepsize": 1e-06,
       "geco_ema_alpha": 0.99,
-      "geco_reconstruction_target": -1.224,
+      "geco_reconstruction_target": -1.5,
+      "geco_step_size_acceleration": 5,
       "checkpoint_freq": 25000,
-      "iters": 200000,
-      "refinement_curriculum": [[-1,3], [200000,3]],
+      "iters": 600000,
+      "refinement_curriculum": [[-1,3], [100000,2], [200000,2]],
       "load_from_checkpoint": false,
       "lr": 0.0004,
       "clip_grad_norm": true,
       "model": "EfficientMORL",
-      "num_workers": 8,
-      "run_suffix": "emorl-tetrominoes",
+      "num_workers": 1,
+      "run_suffix": "",
       "tensorboard_freq": 100,
       "out_dir": "",
       "tqdm": true

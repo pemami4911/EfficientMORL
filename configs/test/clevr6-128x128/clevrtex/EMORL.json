@@ -1,39 +1,40 @@
 {
     "Net": {
-      "K": 4,
+      "K": 11,
       "input_size": [
         3,
-        35, 
-        35
+        128, 
+        128
       ],
-      "image_likelihood": "Gaussian",
-      "z_size": 32,
-      "image_decoder": "small",
+      "image_likelihood": "GMM",
+      "z_size": 64,
+      "image_decoder": "iodine",
       "stochastic_layers": 3,
-      "refinement_iters": 3,
-      "log_scale": -1.2039728,
+      "refinement_iters": 2,
+      "log_scale": -2.3025859,
       "bottom_up_prior": false,
       "reverse_prior_plusplus": true,
       "use_DualGRU": true
     },
     "dataset": {
-        "data_path": "",
-        "h5_path": "tetrominoes_test.h5",
-        "masks": true
-      },
+      "data_path": "",
+      "h5_path": "clevr10_with_masks_test.h5",
+      "masks": true,
+      "clevr_preprocess_style": "clevr-large"
+    },
     "seed": 1,
     "test": {
       "batch_size":1,
-      "output_size": [3,35,35],
+      "output_size": [3,128,128],
       "num_images_to_process": 320,
       "use_geco": true,
       "geco_beta_stepsize": 1e-06,
       "geco_ema_alpha": 0.99,
-      "geco_reconstruction_target": -1.224,        
-      "eval_type": "disentanglement_preprocessing",
+      "geco_reconstruction_target": -2.1,      
+      "eval_type": "clevrtex",
       "mode": "test",
       "model": "EfficientMORL",
-      "experiment_name": "tetrominoes_disentanglement",
+      "experiment_name": "clevr10",
       "out_dir": "",
       "checkpoint": ""
     }

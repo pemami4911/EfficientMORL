@@ -43,11 +43,11 @@ class GRUCell(jit.ScriptModule):
     @jit.script_method
     def forward(self, input, hx):
         # type: (Tensor, Tensor) -> Tuple[Tensor, Tensor]
-        weight_ih = self.pad(self.weight_ih_1,self.weight_ih_2, self.zeros)
-        weight_hh = self.pad(self.weight_hh_1,self.weight_hh_2, self.zeros)
+        weight_ih = self.pad(self.weight_ih_1,self.weight_ih_2, self.zeros.to(hx.device))
+        weight_hh = self.pad(self.weight_hh_1,self.weight_hh_2, self.zeros.to(hx.device))
         
-        weight_in = self.pad(self.weight_in_1, self.weight_in_2, self.zeros_n) # [2*hidden, 2*input_size]
-        weight_hn = self.pad(self.weight_hn_1, self.weight_hn_2, self.zeros_n)  
+        weight_in = self.pad(self.weight_in_1, self.weight_in_2, self.zeros_n.to(hx.device)) # [2*hidden, 2*input_size]
+        weight_hn = self.pad(self.weight_hn_1, self.weight_hn_2, self.zeros_n.to(hx.device))  
         
         gates = (torch.mm(input, weight_ih.t()) + self.bias_ih + \
                 torch.mm(hx, weight_hh.t()) + self.bias_hh)

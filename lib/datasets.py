@@ -1,5 +1,4 @@
 import torch
-import torchvision
 import numpy as np
 import h5py
 from pathlib import Path
@@ -76,7 +75,7 @@ class HdF5Dataset(torch.utils.data.Dataset):
             PIL_mask = PIL_mask.crop((64,29,256,221))
             masks += [np.array(PIL_mask)[...,None]]
         mask = np.stack(masks)  # [o,h,w,c]
-        mask = np.transpose(mask, (0,3,1,2))
+        mask = np.transpose(mask, (0,3,1,2))  # [o,c,h,w]
         return mask    
     
 

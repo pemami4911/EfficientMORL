@@ -29,7 +29,7 @@
     "use_scheduler": true,
     "geco_beta_stepsize": 1e-06,
     "geco_ema_alpha": 0.99,
-    "geco_reconstruction_target": -61000,
+    "geco_reconstruction_target": -2.206,      
     "checkpoint_freq": 25000,
     "iters": 300000,
     "refinement_curriculum": [[-1,3], [100000,1], [200000,1]],
