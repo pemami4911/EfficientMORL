@@ -25,7 +25,7 @@ See the [paper](http://proceedings.mlr.press/v139/emami21a.html) for more detail
 
 ## Installation
 
-We use PyTorch 1.5.0. Install dependencies using the provided conda environment file:
+Install dependencies using the provided conda environment file:
 
 ```bash
 $ conda env create -f environment.yml
@@ -34,6 +34,7 @@ $ conda env create -f environment.yml
 To install the conda environment in a desired directory, add a prefix to the environment file first.
 
 For example, add this line to the end of the environment file: `prefix: /home/{YOUR_USERNAME}/.conda/envs`
+
 ## Multi-Object Datasets
 
 A zip file containing the datasets used in this paper can be downloaded from [here](http://doi.org/10.5281/zenodo.4895643). 
@@ -56,6 +57,7 @@ Please cite the original repo if you use this benchmark in your work:
   year={2019}
 }
 ```
+
 ## Training
 
 We use `sacred` for experiment and hyperparameter management. 
@@ -103,6 +105,31 @@ If you would like to skip training and just play around with a pre-trained model
 | checkpoint | ARI | MSE | KL | wall clock training | hardware | 
 | --- | --- | --- | --- | --- | --- | 
 | emorl-tetrominoes-seed-1200-state-200000.pth | 99.7 | 2.76 x 10^-4 | 70.7 | 5 hrs 2 min | 2x Geforce RTX 2080Ti |
+
+### On using GECO for stabilizing training
+
+We found that on Tetrominoes and CLEVR in the Multi-Object Datasets benchmark, using [GECO](https://arxiv.org/abs/1810.00597) was necessary to stabilize training across random seeds and improve sample efficiency (in addition to using a few steps of lightweight iterative amortized inference).
+
+GECO is an excellent optimization tool for "taming" VAEs that helps with two key aspects:
+1. **Dynamically adjusts a hyperparameter that trades off the reconstruction and KL losses**, which improves training robustness to poor weight initializations from a "bad" random seed. The automatic schedule initially *increases* the relative weight of the reconstruction term to encourage the model to first achieve a high-quality image reconstruction. Following this, the relative weighting of the reconstruction term is *decreased* to minimize the KL.
+2. **Reduces variance** in the gradients of the ELBO by minimizing the distance of an exponential moving average (EMA) of the reconstruction error to a pre-specified target reconstruction error (an easier constrained minimization), instead of trying to directly minimize the error (a harder unconstrained minimization). Lower variance results in faster convergence.
+
+The caveat is we have to specify the desired reconstruction target for each dataset, which depends on the image resolution and image likelihood. 
+Here are the hyperparameters we used for this paper:
+
+| dataset | resolution | image likelihood | global std dev | GECO reconstruction target | 
+| ---     | ---  | --- | ---                 | --- |
+| Tetrominoes | 35 x 35 |  Gaussian       | 0.3 | -4500 (-1.224) | 
+| CLEVR6      | 96 x 96 |  Mixture of Gaussians | 0.1 |  -61000 (-2.206) |
+
+We show the per-pixel and per-channel reconstruction target in paranthesis. Note that we optimize unnormalized image likelihoods, which is why the values are negative.
+We found GECO wasn't needed for Multi-dSprites to achieve stable convergence across many random seeds and a good trade-off of reconstruction and KL. 
+
+**Choosing the reconstruction target:** I have come up with the following heuristic to quickly set the reconstruction target for a new dataset without investing much effort:
+1. Choose a random initial value somewhere in the ballpark of where the reconstruction error should be (e.g., for CLEVR6 128 x 128, we may guess -96000 at first).
+2. Start training and monitor the reconstruction error (e.g., in Tensorboard) for the first 10-20% of training steps. EMORL (and any pixel-based object-centric generative model) will in general learn to reconstruct the background first. This accounts for a large amount of the reconstruction error.
+3. Stop training, and adjust the reconstruction target so that the reconstruction error achieves the target after 10-20% of the training steps. This will reduce variance since `target - EMA(recon_error)` goes to 0 and allows GECO to gently increase its Lagrange parameter until foreground objects are discovered. The target should ideally be set to the reconstruction error achieved *after* foreground objects are discovered.
+4. Once foreground objects are discovered, the EMA of the reconstruction error should be lower than the target (in Tensorboard, `geco_C_ema` will be a positive value, which is `target - EMA(recon_error)`). Once this is positive, the GECO Lagrange parameter will decrease back to 1. This is important so that the model estimates a proper ELBO at the end of training.
 
 ### Model variants & hyperparameters
 
@@ -210,12 +237,6 @@ Results will be stored in a file `rinfo_{i}.pkl` in folder `$OUT_DIR/results/{te
 
 See `./notebooks/demo.ipynb` for the code used to generate figures like Figure 6 in the paper using `rinfo_{i}.pkl`
 
-## Tips for training EfficientMORL on a new image collection
-
-* Use the Gaussian image likelihood if its a 2D sprites-like environment (Start out with the Multi-dSprites hyperparameters)
-* Use the Mixture of Gaussians image likelihood if its a 3D environment (Start out with the CLEVR6 hyperparameters)
-* Try training the model without using GECO at first, however
-* At first, fix the refinement curriculum to use three steps throughout training to get a sense for how long convergence to good local minima takes
 
 ## Citation
 
