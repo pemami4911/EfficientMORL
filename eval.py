@@ -203,8 +203,15 @@ def _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir, num_st
         np.save(out_dir / f'masks.npy', mask_grid.data.cpu().numpy())
 
 def _make_gifs(test, te_dataloader, model, model_geco, out_dir):
+    
     os.environ["IMAGEIO_FFMPEG_EXE"] = "/apps/ffmpeg/4.3.1/bin/ffmpeg"
     os.environ["FFMPEG_BINARY"] = "/apps/ffmpeg/4.3.1/bin/ffmpeg"
+
+    print('Currently, IMAGEIO_FFMPEG_EXE = {} and FFMPEG_BINARY = {}'.format(
+        os.environ["IMAGEIO_FFMPEG_EXE"],
+        os.environ["FFMPEG_BINARY"] 
+    ))
+    
     from moviepy.editor import ImageSequenceClip 
 
     k=10
@@ -212,12 +219,12 @@ def _make_gifs(test, te_dataloader, model, model_geco, out_dir):
     num_frames = 8
     side_length=test['output_size'][1]
     # 1. compute range of posterior means across N images
-    # print('estimating perturbation ranges for latent dims...')
-    # _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_dir)
+    print('estimating perturbation ranges for latent dims...')
+    _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_dir)
 
-    # # 2. compute top-k most active latent dimensions
-    # print('estimating active latent dims...')
-    # _activeness(test, te_dataloader, model, model_geco, out_dir)
+    # 2. compute top-k most active latent dimensions
+    print('estimating active latent dims...')
+    _activeness(test, te_dataloader, model, model_geco, out_dir)
     variances = np.load(out_dir /  'activeness.npy')   # [z_size]
     rows = np.argsort(np.mean(variances,0))[-k:]
     rows = rows[::-1]
