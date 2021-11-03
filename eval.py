@@ -57,6 +57,21 @@ def cfg():
             'clevrtex_variant': 'full'
         }
 
+def rename_state(state):
+    new_state = {}
+    for k,v in state.items():
+        if 'module.pos_embed_projection' in k:
+            new_state[k.replace('module.pos_embed_projection', 'module.hvae_networks.pos_embed_projection')] = v
+        elif 'module.encoder_pt' in k:
+            new_state[k.replace('module', 'module.hvae_networks')] = v
+        elif 'module.object_discovery_block' in k and 'generation_relation' not in k \
+              and 'gru.cell.zeros' not in k and 'gru.cell.zeros_n' not in k:
+            new_state[k.replace('module.object_discovery_block', 'module.hvae_networks')] = v
+        elif 'generation_relation' not in k \
+              and 'gru.cell.zeros' not in k and 'gru.cell.zeros_n' not in k:
+            new_state[k] = v
+    return new_state
+        
 def restore_from_checkpoint(test, checkpoint, local_rank):
     state = torch.load(checkpoint)
     
@@ -70,7 +85,7 @@ def restore_from_checkpoint(test, checkpoint, local_rank):
     model = model.to(local_rank)
     model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[local_rank],
                                                       output_device=local_rank)
-    model.load_state_dict(state['model'])
+    model.load_state_dict(rename_state(state['model']))
     print(f'loaded {checkpoint}')
     model_geco = None
     if test['use_geco']:
@@ -86,9 +101,10 @@ def restore_from_checkpoint(test, checkpoint, local_rank):
 #####################################################
 def _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_dir):
     total_images = 0
+    preprocessing_images = 100
     min_maxes = []
     for i,batch in enumerate(tqdm(te_dataloader)):
-        if total_images >= test['num_images_to_process']:
+        if total_images >= preprocessing_images:
             break
 
         imgs = batch['imgs'].to('cuda')    
@@ -115,20 +131,21 @@ def _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_d
                                      maxes[i].data.cpu().numpy()))
 
 
-def _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir):
+def _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir, num_steps = 8, slot_id = -1):
     total_images = 0
     for i,batch in enumerate(tqdm(te_dataloader)):
         if total_images >= test['num_images_to_process']:
             break
 
         imgs = batch['imgs'].to('cuda')
-        slot_id = test['disentangle_slot']
+        if slot_id == -1:
+            slot_id = test['disentangle_slot']
         
         limit_file = open(out_dir / 'z_range.txt', 'r')
         limits = limit_file.readlines()
         limit_file.close()
 
-        num_steps = 8
+        
         if test['model'] == 'EfficientMORL':
             posterior = model.module.two_stage_inference(imgs, model_geco,
                                                     model.module.geco_warm_start+1, 1,
@@ -185,11 +202,53 @@ def _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir):
         np.save(out_dir / f'ground_truth.npy', imgs.data.cpu().numpy())
         np.save(out_dir / f'masks.npy', mask_grid.data.cpu().numpy())
 
+def _make_gifs(test, te_dataloader, model, model_geco, out_dir):
+    os.environ["IMAGEIO_FFMPEG_EXE"] = "/apps/ffmpeg/4.3.1/bin/ffmpeg"
+    os.environ["FFMPEG_BINARY"] = "/apps/ffmpeg/4.3.1/bin/ffmpeg"
+    from moviepy.editor import ImageSequenceClip 
+
+    k=10
+    padding=2
+    num_frames = 8
+    side_length=test['output_size'][1]
+    # 1. compute range of posterior means across N images
+    # print('estimating perturbation ranges for latent dims...')
+    # _disentanglement_preprocessing(test, te_dataloader, model, model_geco, out_dir)
+
+    # # 2. compute top-k most active latent dimensions
+    # print('estimating active latent dims...')
+    # _activeness(test, te_dataloader, model, model_geco, out_dir)
+    variances = np.load(out_dir /  'activeness.npy')   # [z_size]
+    rows = np.argsort(np.mean(variances,0))[-k:]
+    rows = rows[::-1]
+    print('top active latent dims ', rows)
+    
+    # 3. For each slot, make a gif perturbing each of the top-k active latent dimensions    
+    for slot_id in range(model.module.K):
+        print(f'making gifs for slot {slot_id}...')
+        _disentanglement_viz(test, te_dataloader, model, model_geco, out_dir, num_steps=num_frames, slot_id = slot_id)
+        all_imgs = np.load(out_dir / f'slots_{slot_id}_disentanglement.npy')
+        
+        for r in range(k):
+            start = side_length * rows[r] + (padding*2*rows[r])
+            end = start + padding + side_length + padding
+            imgs_for_gif = all_imgs[:,start:end]
+            imgs_for_gif = np.transpose(imgs_for_gif, (1,2,0))   
+            xs_ = []
+            for i in range(1,num_frames+1):
+                xs_ += [imgs_for_gif[:, (i-1)*(side_length+padding):(i*(side_length+padding))]]
+            xs = xs_
+            xs = [(255. * x).astype('int32') for x in xs]        
+            gif = ImageSequenceClip(xs, fps=4)
+            gif.write_gif(out_dir / f'slot_{slot_id}_row_{r}.gif', fps=4)
+    
+
 def _activeness(test, te_dataloader, model, model_geco, out_dir):
     total_images = 0
     all_var = []
+    num_activeness_images = 100
     for i,batch in enumerate(tqdm(te_dataloader)):
-        if total_images >= test['num_images_to_process']:
+        if total_images >= num_activeness_images:
             break
 
         imgs = batch['imgs'].to('cuda')
@@ -359,10 +418,10 @@ def _ari_mse_kl(test, te_dataloader, model, model_geco, out_dir):
                 resized_masks += [np.array(PIL_mask)[...,None]]
             resized_masks = np.stack(resized_masks)[None]  # [1,K,H,W,C]
             resized_masks = np.transpose(resized_masks, (0,1,4,2,3))
-            pred_masks = torch.from_numpy(resized_masks).to(true_masks.device)
+            pred_masks_big = torch.from_numpy(resized_masks).to(true_masks.device)
         
         # ARI
-        ari = adjusted_rand_index(true_masks, pred_masks)
+        ari = adjusted_rand_index(true_masks, pred_masks_big)
         ari = ari.data.cpu().numpy().reshape(-1)
         all_ARI += [ari]
 
@@ -516,7 +575,7 @@ def do_eval(test, seed, _run):
     else:
         te_dataset = HdF5Dataset(d_set=test['mode'])
     te_dataloader = torch.utils.data.DataLoader(te_dataset, batch_size=test['batch_size'],
-                                                shuffle=True, num_workers=test['num_workers'],
+                                                shuffle=False, num_workers=test['num_workers'],
                                                 drop_last=True)
     checkpoint = Path(test['out_dir'], 'weights', test['checkpoint'])
     
@@ -542,6 +601,8 @@ def do_eval(test, seed, _run):
     elif test['eval_type'] == 'activeness':
         # saves a numpy array of the average pixel variance for each latent dim
         _activeness(test, te_dataloader, model, model_geco, out_dir)
+    elif test['eval_type'] == 'make_gifs':
+        _make_gifs(test, te_dataloader, model, model_geco, out_dir)
     elif test['eval_type'] == 'dci_clevr':
         # prints and saves a text file of the DCI scores
         _dci_clevr(test, te_dataloader, model, model_geco, out_dir)

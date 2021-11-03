@@ -28,10 +28,10 @@
       "eval_type": "clevrtex",
       "mode": "test",
       "model": "EfficientMORL",
-      "experiment_name": "clevrtex-grassbg",
+      "experiment_name": "clevrtex-full",
       "out_dir": "",
       "checkpoint": "",
-      "clevrtex_variant": "grassbg"
+      "clevrtex_variant": "full"
     }
   }
   

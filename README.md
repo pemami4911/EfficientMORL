@@ -66,22 +66,23 @@ All hyperparameters for each model and dataset are organized in JSON files in `.
 ### Tetrominoes example
 We recommend starting out getting familiar with this repo by training EfficientMORL on the Tetrominoes dataset.
 It can finish training in a few hours with 1-2 GPUs and converges relatively quickly.
+The following steps to start training a model can similarly be followed for CLEVR6 and Multi-dSprites.
 
-Inspect the model hyperparameters we use in `./configs/train/tetrominoes/EMORL.json`. 
+Inspect the model hyperparameters we use in `./configs/train/tetrominoes/EMORL.json`, which is the Sacred config file.
 Note that `Net.stochastic_layers` is `L` in the paper and `training.refinement_curriculum` is `I` in the paper.
  
 
 Then, go to `./scripts` and edit `train.sh`. Provide values for the following variables:
 
 ```bash
-NUM_GPUS=#Set to however many GPUs you have available
-SEED=#The desired random seed for this training run
-DDP_PORT=#The port number for torch.distributed, can be left to default
-ENV=tetrominoes
-MODEL=EMORL
-DATA_PATH=#Set to the absolute path of the folder where the unzipped .h5 files are
-BATCH_SIZE=#Set to 32 / NUM_GPUS
-OUT_DIR=#Set to the absolute path of the folder where you will save tensorboard files, model weights, and (optionally) sacred runs
+NUM_GPUS = 2 # Set this to however many GPUs you have available
+SEED = 1 # The desired random seed for this training run
+DDP_PORT = 29500 # The port number for torch.distributed, can be left to default
+ENV = tetrominoes
+MODEL = EMORL
+DATA_PATH = /path/to/data # Set to the absolute path of the folder where the unzipped .h5 files are
+BATCH_SIZE = 16 # Set to 32 / NUM_GPUS
+OUT_DIR = /path/to/outputs # Set to the absolute path of the folder where you will save tensorboard files, model weights, and (optionally) sacred runs
 ```
 
 Start training:
@@ -100,11 +101,12 @@ and open in your browser.
 
 #### Pre-trained Tetrominoes model
 
-If you would like to skip training and just play around with a pre-trained model, we provide the following set of pre-trained weights in `./examples`:
+If you would like to skip training and just play around with a pre-trained model, we provide the following pre-trained weights in `./examples`:
 
 | checkpoint | ARI | MSE | KL | wall clock training | hardware | 
 | --- | --- | --- | --- | --- | --- | 
-| emorl-tetrominoes-seed-1200-state-200000.pth | 99.7 | 2.76 x 10^-4 | 70.7 | 5 hrs 2 min | 2x Geforce RTX 2080Ti |
+| [Tetrominoes](https://github.com/pemami4911/EfficientMORL/blob/main/examples/emorl-tetrominoes-seed-1200-state-200000.pth) | 99.7 | 2.76 x 10^-4 | 70.7 | 5 hrs 2 min | 2x Geforce RTX 2080Ti |
+| [CLEVR6](https://github.com/pemami4911/EfficientMORL/blob/main/examples/emorl-clevr6-seed-2004-state-300000.pth) | 98.05 | 3.64 x 10^-4 | 187.1 | ~17 hours | 8x Geforce RTX 2080Ti |
 
 ### On using GECO for stabilizing training
 
@@ -158,36 +160,46 @@ Some other config parameters are omitted which are self-explanatory.
 
 ## Evaluation
 
-Go to `./scripts`. Open `eval.sh` for editing and update the following variables:
+We provide bash scripts for evaluating trained models.
+
+### Computing ARI + MSE + KL
+
+Like with the training bash script, you need to set/check the following bash variables  `./scripts/eval.sh`:
 
 ```bash
-DATA_PATH=#Set to the absolute path of the folder where the unzipped .h5 files are
-OUT_DIR=#Set to the absolute path of the folder where you will save eval results in, probably same path set for training
-CHECKPOINT=#Set to the name of the .pth file saved in the `weights` directory in $OUT_DIR
+DATA_PATH = /path/to/data # Set this to the absolute path of the folder where the unzipped .h5 files are.
+OUT_DIR = /path/to/results # Set to the absolute path of the folder where you will save eval results in, probably the same path you used for training.
+CHECKPOINT = checkpoint.pth # Set to the name of the .pth file saved in `/path/to/results/weights`
+ENV = tetrominoes # The Multi Object Datasets environment. One of {tetrominoes, clevr6-96x96,multi_dsprites}.
+JSON_FILE = EMORL # The code will look for the sacred config as JSON under `test/$ENV/$EVAL_TYPE/$JSON_FILE.json`.
+EVAL_TYPE = ARI_MSE_KL # Tell `eval.py` what type of evaluation to run. `ARI_MSE_KL` will compute ARI, MSE, and KL. All eval types available can be found in `eval.py`.
 ```
 
- After setting the other variables depending on the desired metric (see below), run the script:
+Then, run the script:
 
 ```bash
 $ ./eval.sh
 ```
 
+Results will be stored in files `ARI.txt`, `MSE.txt` and `KL.txt` in folder `$OUT_DIR/results/{test.experiment_name}/$CHECKPOINT-seed=$SEED`. The `experiment_name` is specified in the sacred JSON file. This path will be printed to the command line as well.
 
-### ARI, MSE, KL
+### Disentanglement GIFs
 
-In `eval.sh`, edit the following variables: 
+We provide a bash script `./scripts/make_gifs.sh` for creating disentanglement GIFs for individual slots. This uses [moviepy](https://anaconda.org/conda-forge/moviepy), which needs ffmpeg. In `eval.py`, we set the `IMAGEIO_FFMPEG_EXE` and `FFMPEG_BINARY` environment variables (at the beginning of the `_mask_gifs` method) which is used by `moviepy`. You will need to make sure these env vars are properly set for your system first.
+
+For each slot, the top 10 latent dims (as measured by their activeness---see paper for definition) are perturbed to make a gif.
+
+Check and update the same bash variables `DATA_PATH`, `OUT_DIR`, `CHECKPOINT`, `ENV`, and `JSON_FILE` as you did for computing the ARI+MSE+KL. The `EVAL_TYPE` is `make_gifs`, which is already set.
+
+Then, run the script:
 
 ```bash
-ENV=tetrominoes # or clevr6, multi_dsprites
-JSON_FILE=EMORL
-EVAL_TYPE=ARI_MSE_KL
+$ ./make_gifs.sh
 ```
 
-Results will be stored in files `ARI.txt`, `MSE.txt` and `KL.txt` in folder `$OUT_DIR/results/{test.experiment_name}/$CHECKPOINT-seed=$SEED`
+A series of files with names `slot_{0-#slots}_row_{0-9}.gif` will be created under the results folder `$OUT_DIR/results/{test.experiment_name}/$CHECKPOINT-seed=$SEED`.  The `experiment_name` is specified in the sacred JSON file. This path will be printed to the command line as well.
 
-### CLEVR6 disentanglement
-
-To compute activeness and make visualizations, you have to do one step of pre-processing first.
+### Other eval
 
 #### Disentanglement preprocessing
 
@@ -196,7 +208,7 @@ Will create a file storing the min/max of the latent dims of the trained model, 
 In `eval.sh`, edit the following variables:
 
 ```bash
-ENV=clevr6
+ENV=clevr6-96x96
 JSON_FILE=EMORL_preprocessing
 EVAL_TYPE=disentanglement
 ```
@@ -206,7 +218,7 @@ EVAL_TYPE=disentanglement
 In `eval.sh`, edit the following variables:
 
 ```bash
-ENV=clevr6
+ENV=clevr6-96x96
 JSON_FILE=EMORL_activeness
 EVAL_TYPE=disentanglement
 ```
@@ -218,7 +230,7 @@ An array of the variance values `activeness.npy` will be stored in folder `$OUT_
 In `eval.sh`, edit the following variables:
 
 ```bash
-ENV=clevr6
+ENV=clevr6-96x96
 JSON_FILE=EMORL_dci
 EVAL_TYPE=disentanglement
 ```
@@ -229,7 +241,7 @@ Results will be stored in a file `dci.txt` in folder `$OUT_DIR/results/{test.exp
 In `eval.sh`, edit the following variables:
 
 ```bash
-ENV=clevr6 # or tetrominoes, multi_dsprites
+ENV=clevr6-96x96 # or tetrominoes, multi_dsprites
 JSON_FILE=EMORL
 EVAL_TYPE=sample_viz
 ```

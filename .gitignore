@@ -3,6 +3,7 @@ emorl/
 lib/__pycache__/
 notebooks/.ipynb_checkpoints/
 .ipynb_checkpoints/
+notebooks/scrap.ipynb
 scripts/*.slurm
 scripts/*.error
 scripts/*.output

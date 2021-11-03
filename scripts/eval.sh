@@ -3,12 +3,14 @@
 NUM_GPUS=1
 SEED=2
 DDP_PORT=29500
-ENV=clevr6-96x96 # clevr6-96x96, multi_dsprites, tetrominoes
-JSON_file=EMORL # EMORL, SlotAttention, or X_{activeness, dci, preprocessing, viz}
-EVAL_TYPE=sample_viz  # {ARI_MSE_KL, sample_viz, disentanglement}
+
 DATA_PATH= #YOUR_DATA_PATH
 OUT_DIR= #YOUR_RESULTS_DIR
 CHECKPOINT= #the .pth file 
+ENV=clevr6-96x96 # clevr6-96x96, multi_dsprites, tetrominoes
+JSON_file=EMORL # EMORL, SlotAttention, or X_{activeness, dci, preprocessing, viz}
+EVAL_TYPE=ARI_MSE_KL  # {ARI_MSE_KL, sample_viz, disentanglement}
+
 DISENTANGLE_SLOT=0  # for disentanglement viz of a slot
 HOST_NODE_ADDR='127.0.0.1:'$DDP_PORT
 

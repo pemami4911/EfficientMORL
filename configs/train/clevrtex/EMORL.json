@@ -27,7 +27,7 @@
       "geco_reconstruction_target": -1.5,
       "geco_step_size_acceleration": 5,
       "checkpoint_freq": 25000,
-      "iters": 600000,
+      "iters": 300000,
       "refinement_curriculum": [[-1,3], [100000,2], [200000,2]],
       "load_from_checkpoint": false,
       "lr": 0.0004,

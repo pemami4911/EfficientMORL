@@ -1,0 +1,30 @@
+{
+    "Net": {
+      "K": 7,
+      "input_size": [
+        3,
+        96, 
+        96 
+      ],
+      "z_size": 64,
+      "image_decoder": "big"
+    },
+    "dataset": {
+      "data_path": "",
+      "h5_path": "clevr6_with_masks_train.h5",
+      "masks": true
+    },
+    "seed": 1,
+    "test": {
+      "batch_size":1,
+      "output_size": [3,96,96],
+      "num_images_to_process": 320,    
+      "eval_type": "ARI_MSE_KL",
+      "mode": "test",
+      "model": "SlotAttention",
+      "experiment_name": "Multi_Object_Datasets",
+      "out_dir": "",
+      "checkpoint": ""
+    }
+  }
+  
